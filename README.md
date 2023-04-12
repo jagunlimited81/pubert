@@ -3,6 +3,7 @@
 docker run ghcr.io/jagunlimited81/pubert:latest ...
 ```
 ### Environment variables:
+
 ```
 OPENAI_API_KEY=X
 DISCORD_BOT_TOKEN=X
