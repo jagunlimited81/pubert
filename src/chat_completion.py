@@ -4,12 +4,10 @@ import openai
 from src.moderation import moderate_message
 from typing import Optional, List
 from src.constants import (
-    BOT_INSTRUCTIONS,
     BOT_NAME,
-    EXAMPLE_CONVOS,
+    BOT_CONTEXT,
 )
 import discord
-from src.base import Message, Prompt, Conversation
 from src.utils import split_into_shorter_messages, close_thread, logger
 from src.moderation import (
     send_moderation_flagged_message,
@@ -17,7 +15,7 @@ from src.moderation import (
 )
 
 MY_BOT_NAME = BOT_NAME
-MY_BOT_EXAMPLE_CONVOS = EXAMPLE_CONVOS
+MY_BOT_CONTEXT = BOT_CONTEXT
 
 
 class CompletionResult(Enum):
@@ -36,45 +34,37 @@ class CompletionData:
     status_text: Optional[str]
 
 
-async def generate_completion_response(
-    messages: List[Message], user: str
+async def generate_chatcompletion_response(
+        messages: List[dict]
 ) -> CompletionData:
     try:
-        prompt = Prompt(
-            header=Message(
-                "System", f"Instructions for {MY_BOT_NAME}: {BOT_INSTRUCTIONS}"
-            ),
-            examples=MY_BOT_EXAMPLE_CONVOS,
-            convo=Conversation(messages + [Message(MY_BOT_NAME)]),
-        )
-        rendered = prompt.render()
-        response = openai.Completion.create(
-            engine="text-davinci-003",
-            prompt=rendered,
+        messages.insert(0, {"role": "system", "content": MY_BOT_CONTEXT})
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            max_tokens=1024,
             temperature=1.0,
-            top_p=0.9,
-            max_tokens=512,
-            stop=["<|endoftext|>"],
+            messages=messages
         )
-        reply = response.choices[0].text.strip()
-        if reply:
-            flagged_str, blocked_str = moderate_message(
-                message=(rendered + reply)[-500:], user=user
-            )
-            if len(blocked_str) > 0:
-                return CompletionData(
-                    status=CompletionResult.MODERATION_BLOCKED,
-                    reply_text=reply,
-                    status_text=f"from_response:{blocked_str}",
-                )
-
-            if len(flagged_str) > 0:
-                return CompletionData(
-                    status=CompletionResult.MODERATION_FLAGGED,
-                    reply_text=reply,
-                    status_text=f"from_response:{flagged_str}",
-                )
-
+        reply = response['choices'][0]['message']['content']
+        # moderate responses
+        # if reply:
+        #     flagged_str, blocked_str = moderate_message(
+        #         message=(rendered + reply)[-500:], user=user
+        #     )
+        #     if len(blocked_str) > 0:
+        #         return CompletionData(
+        #             status=CompletionResult.MODERATION_BLOCKED,
+        #             reply_text=reply,
+        #             status_text=f"from_response:{blocked_str}",
+        #         )
+        #
+        #     if len(flagged_str) > 0:
+        #         return CompletionData(
+        #             status=CompletionResult.MODERATION_FLAGGED,
+        #             reply_text=reply,
+        #             status_text=f"from_response:{flagged_str}",
+        #         )
+        #
         return CompletionData(
             status=CompletionResult.OK, reply_text=reply, status_text=None
         )
@@ -98,7 +88,7 @@ async def generate_completion_response(
 
 
 async def process_response(
-    user: str, thread: discord.Thread, response_data: CompletionData
+        user: str, thread: discord.Thread, response_data: CompletionData
 ):
     status = response_data.status
     reply_text = response_data.reply_text

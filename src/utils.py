@@ -1,10 +1,10 @@
 from src.constants import (
     ALLOWED_SERVER_IDS,
+    DISCORD_CLIENT_ID,
 )
 import logging
 
 logger = logging.getLogger(__name__)
-from src.base import Message
 from discord import Message as DiscordMessage
 from typing import Optional, List
 import discord
@@ -12,37 +12,41 @@ import discord
 from src.constants import MAX_CHARS_PER_REPLY_MSG, INACTIVATE_THREAD_PREFIX
 
 
-def discord_message_to_message(message: DiscordMessage) -> Optional[Message]:
+def discord_message_to_openai_message(message: DiscordMessage) -> Optional[dict]:
     if (
-        message.type == discord.MessageType.thread_starter_message
-        and message.reference.cached_message
-        and len(message.reference.cached_message.embeds) > 0
-        and len(message.reference.cached_message.embeds[0].fields) > 0
+            message.type == discord.MessageType.thread_starter_message
+            and message.reference.cached_message
+            and len(message.reference.cached_message.embeds) > 0
+            and len(message.reference.cached_message.embeds[0].fields) > 0
     ):
         field = message.reference.cached_message.embeds[0].fields[0]
         if field.value:
-            return Message(user=field.name, text=field.value)
+            return {"role": "user", "content": field.value}
     else:
         if message.content:
-            return Message(user=message.author.name, text=message.content)
+            if message.author.id == int(DISCORD_CLIENT_ID):
+                user = "assistant"
+            else:
+                user = "user"
+            return {"role": user, "content": message.content}
     return None
 
 
 def split_into_shorter_messages(message: str) -> List[str]:
     return [
-        message[i : i + MAX_CHARS_PER_REPLY_MSG]
+        message[i: i + MAX_CHARS_PER_REPLY_MSG]
         for i in range(0, len(message), MAX_CHARS_PER_REPLY_MSG)
     ]
 
 
 def is_last_message_stale(
-    interaction_message: DiscordMessage, last_message: DiscordMessage, bot_id: str
+        interaction_message: DiscordMessage, last_message: DiscordMessage, bot_id: str
 ) -> bool:
     return (
-        last_message
-        and last_message.id != interaction_message.id
-        and last_message.author
-        and last_message.author.id != bot_id
+            last_message
+            and last_message.id != interaction_message.id
+            and last_message.author
+            and last_message.author.id != bot_id
     )
 
 

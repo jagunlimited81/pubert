@@ -1,11 +1,9 @@
 import discord
 from discord import Message as DiscordMessage
 import logging
-from src.base import Message, Conversation
 from src.constants import (
     BOT_INVITE_URL,
     DISCORD_BOT_TOKEN,
-    EXAMPLE_CONVOS,
     ACTIVATE_THREAD_PREFX,
     MAX_THREAD_MESSAGES,
     SECONDS_DELAY_RECEIVING_MSG,
@@ -16,10 +14,13 @@ from src.utils import (
     should_block,
     close_thread,
     is_last_message_stale,
-    discord_message_to_message,
+    discord_message_to_openai_message,
 )
-from src import completion
-from src.completion import generate_completion_response, process_response
+from src import chat_completion
+from src.chat_completion import (
+    generate_chatcompletion_response,
+    process_response
+)
 from src.moderation import (
     moderate_message,
     send_moderation_blocked_message,
@@ -40,16 +41,7 @@ tree = discord.app_commands.CommandTree(client)
 @client.event
 async def on_ready():
     logger.info(f"We have logged in as {client.user}. Invite URL: {BOT_INVITE_URL}")
-    completion.MY_BOT_NAME = client.user.name
-    completion.MY_BOT_EXAMPLE_CONVOS = []
-    for c in EXAMPLE_CONVOS:
-        messages = []
-        for m in c.messages:
-            if m.user == "Lenard":
-                messages.append(Message(user=client.user.name, text=m.text))
-            else:
-                messages.append(m)
-        completion.MY_BOT_EXAMPLE_CONVOS.append(Conversation(messages=messages))
+    chat_completion.MY_BOT_NAME = client.user.name
     await tree.sync()
 
 
@@ -126,9 +118,9 @@ async def chat_command(int: discord.Interaction, message: str):
         )
         async with thread.typing():
             # fetch completion
-            messages = [Message(user=user.name, text=message)]
-            response_data = await generate_completion_response(
-                messages=messages, user=user
+            messages = [{"role": "user", "content": message}]
+            response_data = await generate_chatcompletion_response(
+                messages=messages
             )
             # send the result
             await process_response(
@@ -236,16 +228,18 @@ async def on_message(message: DiscordMessage):
         )
 
         channel_messages = [
-            discord_message_to_message(message)
+            discord_message_to_openai_message(message)
             async for message in thread.history(limit=MAX_THREAD_MESSAGES)
         ]
-        channel_messages = [x for x in channel_messages if x is not None]
+        channel_messages = [x for x in channel_messages if x is not None]  # trim empty messages
         channel_messages.reverse()
+        for obj in channel_messages:
+            logger.info(f"{obj.get('role')} : {obj.get('content')}")
 
         # generate the response
         async with thread.typing():
-            response_data = await generate_completion_response(
-                messages=channel_messages, user=message.author
+            response_data = await generate_chatcompletion_response(
+                messages=channel_messages
             )
 
         if is_last_message_stale(
