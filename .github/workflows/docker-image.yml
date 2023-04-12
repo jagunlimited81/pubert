@@ -20,7 +20,7 @@ jobs:
         
     - name: build the docker image  
       run: |
-        docker build . --file Dockerfile --tag pubert:latest
-        docker push ghcr.io/jagunlimited81/pubert:latest
+        docker build . --file Dockerfile --tag ghcr.io/${{github.actor}}/pubert:latest
+        docker push ghcr.io/${{github.actor}}/pubert:latest
       
     
