@@ -188,7 +188,7 @@ async def say_command(inter: discord.Interaction, message: str):
 
         async with inter.channel.typing():
             # fetch completion
-            messages = [{"role": "user", "content": f"say {message}"}]
+            messages = [{"role": "user", "content": f"You have been prompted to say a message along the lines of '{message}'"}]
             response_data = await generate_chatcompletion_response(
                 messages=messages
             )
