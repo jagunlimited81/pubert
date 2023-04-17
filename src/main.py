@@ -126,9 +126,77 @@ async def chat_command(int: discord.Interaction, message: str):
             await process_response(
                 user=user, thread=thread, response_data=response_data
             )
+
     except Exception as e:
         logger.exception(e)
         await int.response.send_message(
+            f"Failed to start chat {str(e)}", ephemeral=True
+        )
+
+
+@tree.command(name="say", description="Force pubert to say something")
+@discord.app_commands.checks.has_permissions(send_messages=True)
+@discord.app_commands.checks.has_permissions(view_channel=True)
+@discord.app_commands.checks.bot_has_permissions(send_messages=True)
+@discord.app_commands.checks.bot_has_permissions(view_channel=True)
+async def say_command(inter: discord.Interaction, message: str):
+    try:
+        # only support creating thread in text channel
+        if not isinstance(inter.channel, discord.TextChannel):
+            return
+
+        # block servers not in allow list
+        if should_block(guild=inter.guild):
+            return
+
+        user = inter.user
+        logger.info(f"Chat command by {user} {message[:20]}")
+        try:
+            # moderate the message
+            flagged_str, blocked_str = moderate_message(message=message, user=user)
+            await send_moderation_blocked_message(
+                guild=inter.guild,
+                user=user,
+                blocked_str=blocked_str,
+                message=message,
+            )
+            if len(blocked_str) > 0:
+                # message was blocked
+                await inter.response.send_message(
+                    f"Your prompt has been blocked by moderation.\n{message}",
+                    ephemeral=True,
+                )
+                return
+
+            # await send_moderation_flagged_message(
+            #     guild=inter.guild,
+            #     user=user,
+            #     flagged_str=flagged_str,
+            #     message=message,
+            #     url=response.jump_url,
+            # )
+        except Exception as e:
+            logger.exception(e)
+            await inter.response.send_message(
+                f"Failed to start chat {str(e)}", ephemeral=True
+            )
+            return
+
+        await inter.response.send_message(
+            "generating...", ephemeral=True
+        )
+
+        async with inter.channel.typing():
+            # fetch completion
+            messages = [{"role": "user", "content": f"say {message}"}]
+            response_data = await generate_chatcompletion_response(
+                messages=messages
+            )
+            # send the result
+            await inter.channel.send(response_data.reply_text)
+    except Exception as e:
+        logger.exception(e)
+        await inter.response.send_message(
             f"Failed to start chat {str(e)}", ephemeral=True
         )
 
